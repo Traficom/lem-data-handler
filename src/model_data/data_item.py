@@ -1,10 +1,12 @@
 """Describes model data item that can have multiple categories"""
 from __future__ import annotations
+
 from functools import total_ordering
+from typing import Dict, Generic, Hashable, TypeVar
 
-from typing import Dict, Generic, TypeVar
+from pandas import DataFrame, Series
 
-KT = TypeVar('KT', float, int)
+KT = TypeVar('KT', bound=Hashable)
 
 @total_ordering
 class DataItem(Generic[KT]):
@@ -66,7 +68,7 @@ class DataItem(Generic[KT]):
                (sum(self._categories.values()) <= 1.0 + epsilon)
     
     @property
-    def uncategorised_proportion(self) -> float:
+    def uncategorized_proportion(self) -> float:
         """Returns the proportion of the value not belonging to any category.
         i.e. (1 - sum(category_proportions))
 
@@ -82,9 +84,9 @@ class DataItem(Generic[KT]):
         Returns:
             float: Value for non-categorized portion.
         """
-        return self.total * self.uncategorised_proportion
+        return self.total * self.uncategorized_proportion
     
-    def __get__(self, category: KT) -> float:
+    def __getitem__(self, category: KT) -> float:
         """Returns the value for single category
 
         Args:
@@ -139,7 +141,7 @@ class DataItem(Generic[KT]):
         """Adds two data items together
 
         Args:
-            other (DataItem[KT]): Righthand side operator for the addition.
+            other (DataItem[KT]): Righthand side operand for the addition.
 
         Returns:
             _type_: Sum of the two dataitems
@@ -153,11 +155,11 @@ class DataItem(Generic[KT]):
             (sum(left.values()) + sum(right.values()))
         return DataItem(category_totals=categories, uncategorized_total=uncategorized)
     
-    def __mult__(self, other: float) -> DataItem[KT]:
+    def __mul__(self, other: float) -> DataItem[KT]:
         """Scales the DataItem with a float value.
 
         Args:
-            other (float): Righthand side scalar operator
+            other (float): Righthand side scalar operand
 
         Returns:
             DataItem[KT]: A new scaled DataItem
@@ -165,12 +167,23 @@ class DataItem(Generic[KT]):
         return DataItem(total=self.total*other,
                         category_proportions=self._categories)
     
+    def __truediv__(self, other: float) -> DataItem[KT]:
+        """Divides the DataItem with a float value.
+
+        Args:
+            other (float): Righthand side division operand
+
+        Returns:
+            DataItem[KT]: A new scaled DataItem
+        """
+        return self * (1.0 / other)
+    
     def __lt__(self, other: DataItem[KT]) -> bool:
         """Less-than operator for comparing two DataItems. Comparison is
             done only on the total value.
 
         Args:
-            other (DataItem[KT]): Righthand side operator
+            other (DataItem[KT]): Righthand side operand
 
         Returns:
             bool: Returns true if the total of left item is less than 
@@ -183,10 +196,52 @@ class DataItem(Generic[KT]):
             done only on the total value.
 
         Args:
-            other (DataItem[KT]): Righthand side operator
+            other (DataItem[KT]): Righthand side operand
 
         Returns:
             bool: Returns true if the total of left item equals 
                 the total of the right item.
         """
         return self.total == other.total
+
+    def __repr__(self) -> str:
+        """Returns the string representation of the DataItem
+
+        Returns:
+            str: String representation of the DataItem
+        """
+        return str(self.total) + ':' + str(self._categories)
+    
+    def __str__(self) -> str:
+        """Returns a human readable string representation of the DataItem
+
+        Returns:
+            str: String representation of the DataItem
+        """
+        categories = ', '.join([
+            f'{k}:{v:g}({self._categories[k]*100:.0f}%)'
+            for k, v in self.get_categorized().items()] +\
+                [f'?:{self.uncategorized:g}({self.uncategorized_proportion*100:.0f}%)'])
+                               
+        return f'{self.total:g}:[{categories}]'
+        
+def dataframe_to_data_items(df: DataFrame,
+                            total_column: str,
+                            category_columns: Dict[KT, str]) \
+                                -> Series[DataItem[KT]]:
+    """Builds Pandas series of DataItems from a dataframe
+
+    Args:
+        df (DataFrame): DataFrame to read in
+        total (str | None): Column name for total value of the DataItem
+        category_columns (Dict[KT, str] | None): Dictionary of categories and the 
+            corresponding dataframe column name
+
+    Returns:
+        Series[DataItem[KT]]: Pandas Series of DataItems
+    """
+    def _row_to_data_item(row: Dict[str, float]):
+        return DataItem(total=row[total_column],
+                        category_proportions=dict(zip(category_columns.keys(),
+                                        [row[x] for x in category_columns.values()])))
+    return df.apply(_row_to_data_item, axis=1)
