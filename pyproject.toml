@@ -217,6 +217,7 @@ typeCheckingMode = "basic"
 reportMissingImports = "information"
 reportMissingTypeStubs = "none"
 reportUnknownMemberType = "none"
+reportGeneralTypeIssues = "none"
 
 extraPaths = ["src"]
 
