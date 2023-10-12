@@ -28,13 +28,15 @@ class OMXSpecification(NamedTuple):
     matrix: str
     """Name of the matrix object in the file"""
 
-def _replace_submatrix(matrix: np.ndarray, zones: List[int],
-        submatrix: np.ndarray, subzones: List[int]):
+def _replace_submatrix(matrix: npt.NDArray[LOSDtype],
+                       zones: npt.NDArray[np.uint32],
+                       submatrix: npt.NDArray[LOSDtype],
+                       subzones: npt.NDArray[np.uint32]):
     """Replaces the selected area of the first input matrix with the specified
         submatrix inplace
 
     Args:
-        matrix (np.ndarray): Larger inputmatrix that will be modified
+        matrix (npt.NDArray[LOSDtype]): Larger inputmatrix that will be modified
         zones (List[int]): Zone numbering of the larger matrix
         submatrix (np.ndarray): Smaller submatrix
         subzones (List[int]): Zone numbering in the smaller matrix
@@ -67,11 +69,38 @@ def get_helmet_matrix_spec(base_dir: Path) -> Dict[TimePeriod, Dict[LOSType,
     }
 
     los_types = {
-        LOSType.CAR_COST: ('cost', 'car_work'),
-        LOSType.CAR_DISTANCE: ('dist', 'car_work'),
-        LOSType.CAR_TIME: ('time', 'car_work'),
-        LOSType.TRANSIT_COST: ('cost', 'transit_work'),
-        LOSType.TRANSIT_TIME: ('time', 'transit_work')
+        LOSType.CAR_WORK_COST: ('cost', 'car_work'),
+        LOSType.CAR_LEISURE_COST: ('cost', 'car_leisure'),
+        LOSType.CAR_WORK_DISTANCE: ('dist', 'car_work'),
+        LOSType.CAR_LEISURE_DISTANCE: ('dist', 'car_leisure'),
+        LOSType.CAR_WORK_TIME: ('time', 'car_work'),
+        LOSType.CAR_LEISURE_TIME: ('time', 'car_leisure'),
+
+        LOSType.TRANSIT_WORK_COST: ('cost', 'transit_work'),
+        LOSType.TRANSIT_LEISURE_COST: ('cost', 'transit_leisure'),
+        LOSType.TRANSIT_WORK_DISTANCE: ('dist', 'transit_work'),
+        LOSType.TRANSIT_LEISURE_DISTANCE: ('dist', 'transit_leisure'),
+        LOSType.TRANSIT_WORK_TIME: ('time', 'transit_work'),
+        LOSType.TRANSIT_LEISURE_TIME: ('time', 'transit_leisure'),
+        
+        LOSType.TRUCK_COST: ('cost', 'truck'),
+        LOSType.TRAILER_TRUCK_COST: ('cost', 'trailer_truck'),
+        LOSType.TRUCK_TIME: ('time', 'truck'),
+        LOSType.TRAILER_TRUCK_TIME: ('time', 'trailer_truck'),
+        LOSType.TRUCK_DIST: ('dist', 'truck'),
+        LOSType.TRAILER_TRUCK_DIST: ('dist', 'trailer_truck'),
+        
+        LOSType.WALK_TIME: ('time', 'walk'),
+        LOSType.WALK_DISTANCE: ('dist', 'walk'),
+        LOSType.BIKE_TIME: ('time', 'bike'),
+        LOSType.BIKE_DISTANCE: ('dist', 'bike'),
+        
+        LOSType.CAR_FIRST_MILE_COST: ('cost', 'car_first_mile'),
+        LOSType.CAR_FIRST_MILE_DIST: ('dist', 'car_first_mile'),
+        LOSType.CAR_FIRST_MILE_TIME: ('time', 'car_first_mile'),
+        LOSType.CAR_LAST_MILE_COST: ('cost', 'car_last_mile'),
+        LOSType.CAR_LAST_MILE_DIST: ('dist', 'car_last_mile'),
+        LOSType.CAR_LAST_MILE_TIME: ('time', 'car_last_mile'),
     }
     
     return dict(
@@ -151,15 +180,14 @@ class LOSMatrix:
             fill_value=default_value,
             dtype=LOSDtype)
         
-        target_zones = mapping.zones
+        target_zones = np.array(mapping.zones)
         for subarea in subareas:
-            source_zones = subarea._mapping.zones
+            source_zones = np.array(subarea._mapping.zones)
             _replace_submatrix(data,
                                target_zones,
                                subarea.to_numpy(),
                                source_zones)
         return LOSMatrix(mapping, data)
-
         
     def __init__(self, mapping: ZoneMapping, data: npt.NDArray[LOSDtype]):
         if not (data.shape[0] == data.shape[1] == len(mapping)):
