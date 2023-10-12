@@ -3,11 +3,11 @@ from typing import cast
 import pandas as pd
 import geopandas as gpd
 from pandas.testing import assert_frame_equal
+from model_data.aggregation import apply_default_values
 
 from model_data.zone_mapping import ZoneMapping
 from model_data.data_loader import (IndexAggregation, AreaShareAggregation,
                                     LargestAreaAggregation)
-from model_data.constants import GEO_ENGINE
 import logging
 
 LOGGER = logging.getLogger(__name__)
@@ -15,8 +15,7 @@ LOGGER = logging.getLogger(__name__)
 KNOWN_ZONES = range(110, 180, 10)
 VALID_TEST_DATA = pd.DataFrame([{'a': x+1, 'b': x+2} for x in KNOWN_ZONES],
                                index = KNOWN_ZONES)
-ZONE_DATA = Path('./tests/data/zone_data.gpkg')
-POLYGON_DATA = 'polygon_data'
+
 
 AREA_SHARE_RESULT = pd.DataFrame(index=pd.Index(KNOWN_ZONES, name='zone_id'),
                                  data=[[37.5         , 39.375],
@@ -45,27 +44,29 @@ def test_index_aggregation(mapping: ZoneMapping):
     converted = IndexAggregation()(mapping, VALID_TEST_DATA)
     assert_frame_equal(converted.data, VALID_TEST_DATA)
     
-def test_area_share_aggregation(mapping: ZoneMapping):
+def test_area_share_aggregation(mapping: ZoneMapping, polygon_data: gpd.GeoDataFrame):
     """Tests area_share_aggregation
     """
-    input_data = cast(gpd.GeoDataFrame, gpd.read_file(ZONE_DATA,
-                                                      layer=POLYGON_DATA,
-                                                      engine=GEO_ENGINE))
     default_values = {'a': 0., 'b': 1.}
     mapped_data = AreaShareAggregation()(mapping,
-                                         input_data,
-                                         default_values=default_values)
+                                         polygon_data)
+    mapped_data = apply_default_values(mapped_data, default_values)
     assert_frame_equal(mapped_data.data, AREA_SHARE_RESULT)
 
-def test_largest_area_aggregation(mapping: ZoneMapping):
+def test_largest_area_aggregation(mapping: ZoneMapping, polygon_data: gpd.GeoDataFrame):
     """Tests largest_area_aggregation
     """
-    input_data = cast(gpd.GeoDataFrame, gpd.read_file(ZONE_DATA,
-                                                      layer=POLYGON_DATA,
-                                                      engine=GEO_ENGINE))
     default_values = {'a': 0., 'b': 1.}
     mapped_data = LargestAreaAggregation()(mapping,
-                                         input_data,
-                                         default_values=default_values)
+                                         polygon_data)
+    mapped_data = apply_default_values(mapped_data, default_values)
     assert_frame_equal(mapped_data.data, LARGEST_AREA_RESULT)
-    
+
+def test_area_share_aggregation2(mapping: ZoneMapping, polygon_data: gpd.GeoDataFrame):
+    """Tests area_share_aggregation
+    """
+    default_values = {'a': 0., 'b': 1.}
+    mapped_data = AreaShareAggregation()(mapping,
+                                         polygon_data)
+    mapped_data = apply_default_values(mapped_data, default_values)
+    assert_frame_equal(mapped_data.data, AREA_SHARE_RESULT)
