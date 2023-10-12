@@ -9,9 +9,9 @@ from model_data.los import (LOS_MISSING, LOSData, get_helmet_matrix_spec, TimePe
 from model_data.zone_mapping import ZoneMapping
 import numpy as np
 
-BASE_PATH = Path('../../../SharePoint/T/8. Hankkeessa tuotetut lähtötiedot malleihin')
+BASE_PATH = Path('../../../SharePoint/T')
 
-DATA_PATH = BASE_PATH / 'Vastusmatriisit'
+DATA_PATH = BASE_PATH / '8. Hankkeessa tuotetut lähtötiedot malleihin/Vastusmatriisit'
 SUBAREA_PATHS = [
     DATA_PATH / 'Itä-Suomi',
     DATA_PATH / 'Lounais-Suomi',
@@ -19,8 +19,9 @@ SUBAREA_PATHS = [
     DATA_PATH / 'Uusimaa',
 ]
 
-TARGET_MAPPING_GPKG = BASE_PATH / 'Verkot/koko_suomi_2023-10-08/koko_suomi.gpkg'
-TARGET_PATH= Path(r'C:\Users\makinsam\Documents\Code\data\koko_suomi')
+TARGET_MAPPING_GPKG = BASE_PATH / ('3. Liikenneverkkotyö/Emmeaineistot/vanhat verkot'+
+    '/2023-08-10_koko_suomi/koko_suomi.gpkg')
+TARGET_PATH= Path('../data/koko_suomi')
 
 def load_subareas(paths: List[Path]) -> List[LOSData]:
     """Loads subarea LOS data using helmet naming scheme
