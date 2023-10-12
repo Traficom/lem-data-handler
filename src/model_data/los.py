@@ -254,11 +254,38 @@ class TimePeriod(Enum):
     
 class LOSType(Enum):
     """Level-of-service types"""
-    CAR_TIME=auto()
-    CAR_DISTANCE=auto()
-    CAR_COST=auto()
-    TRANSIT_TIME=auto()
-    TRANSIT_COST=auto()
+    CAR_WORK_COST=auto()
+    CAR_LEISURE_COST=auto()
+    CAR_WORK_DISTANCE=auto()
+    CAR_LEISURE_DISTANCE=auto()
+    CAR_WORK_TIME=auto()
+    CAR_LEISURE_TIME=auto()
+
+    TRANSIT_WORK_COST=auto()
+    TRANSIT_LEISURE_COST=auto()
+    TRANSIT_WORK_DISTANCE=auto()
+    TRANSIT_LEISURE_DISTANCE=auto()
+    TRANSIT_WORK_TIME=auto()
+    TRANSIT_LEISURE_TIME=auto()
+
+    TRUCK_COST=auto()
+    TRAILER_TRUCK_COST=auto()
+    TRUCK_TIME=auto()
+    TRAILER_TRUCK_TIME=auto()
+    TRUCK_DIST=auto()
+    TRAILER_TRUCK_DIST=auto()
+
+    WALK_TIME=auto()
+    WALK_DISTANCE=auto()
+    BIKE_TIME=auto()
+    BIKE_DISTANCE=auto()
+
+    CAR_FIRST_MILE_COST=auto()
+    CAR_FIRST_MILE_DIST=auto()
+    CAR_FIRST_MILE_TIME=auto()
+    CAR_LAST_MILE_COST=auto()
+    CAR_LAST_MILE_DIST=auto()
+    CAR_LAST_MILE_TIME=auto()
 
 class LOSTimePeriod:
     """Container for various level-of-service matrices"""
