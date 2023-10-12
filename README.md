@@ -1,3 +1,3 @@
-#Model data handling
+# Model data handling
 
-Routines for importing, exporting and converting model data
+Routines for importing, presenting, exporting and converting model data

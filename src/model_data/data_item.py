@@ -137,7 +137,7 @@ class DataItem(Generic[KT]):
             result[uncategorized_as] = self.total - sum(result.values())
         return result
     
-    def __add__(self, other: DataItem[KT]):
+    def __add__(self, other: DataItem[KT]|float):
         """Adds two data items together
 
         Args:
@@ -147,13 +147,16 @@ class DataItem(Generic[KT]):
             _type_: Sum of the two dataitems
         """
         left = self.get_categorized()
-        right = other.get_categorized()
-        
-        keys = set(list(left.keys()) + list(right.keys()))
-        categories = dict([(k, left.get(k, 0.0) + right.get(k, 0.0)) for k in keys])
-        uncategorized = (self.total + other.total) - \
-            (sum(left.values()) + sum(right.values()))
-        return DataItem(category_totals=categories, uncategorized_total=uncategorized)
+        if isinstance(other, DataItem):
+            right = other.get_categorized()
+            
+            keys = set(list(left.keys()) + list(right.keys()))
+            categories = dict([(k, left.get(k, 0.0) + right.get(k, 0.0)) for k in keys])
+            uncategorized = (self.total + other.total) - \
+                (sum(left.values()) + sum(right.values()))
+            return DataItem(category_totals=categories,
+                            uncategorized_total=uncategorized)
+        return DataItem(self.total+other, self._categories)
     
     def __mul__(self, other: float) -> DataItem[KT]:
         """Scales the DataItem with a float value.
