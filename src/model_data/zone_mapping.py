@@ -129,6 +129,24 @@ class ZoneMapping:
         file.close()
         return ZoneMapping.from_zone_numbers(zones_in_file)
 
+    @classmethod
+    def from_file(cls, filename: Path) -> ZoneMapping:
+        """Creates zonemapping from a file and tries to guess the right format using
+            the file extension
+
+        Args:
+            filename (Path): Path to the file to load
+
+        Returns:
+            ZoneMapping: New zone mapping read from the file
+        """
+        loaders = {
+            '.gpkg': ZoneMapping.from_gpkg,
+            '.omx': ZoneMapping.from_omx,
+        }
+        extension = filename.suffix
+        return loaders[extension](filename)
+
     def __init__(self, data: DataFrame[ZoneDataSchema]):
         """Initializes zone mapping from given geodataframe.
         Args:
