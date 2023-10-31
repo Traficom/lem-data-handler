@@ -1,0 +1,64 @@
+{
+    "zone_mapping":
+    {
+        "zone_file": "../../data/koko_suomi.gpkg"
+    },
+    "zone_data":
+    [
+        {
+            "file": {
+                "file_name": "../../data/landuse.gpkg",
+                "extra": {"layer": "landuse"}
+            },
+            "aggregation": "AREA_SHARE",
+            "columns":
+            [
+                {
+                    "result": "population",
+                    "column": "pop_total",
+                    "shares":
+                    {
+                        "sh_7-17": "pop_sh_7-17",
+                        "sh_1829": "pop_sh_1829",
+                        "sh_3049": "pop_sh_3049",
+                        "sh_5064": "pop_sh_5064",
+                        "sh_65-": "pop_sh_65-"
+                    }
+                },
+                {
+                    "result": "workplaces",
+                    "column": "wrk_total",
+                    "shares":
+                    {
+                        "sh_serv": "wrk_sh_serv",
+                        "sh_shop": "wrk_sh_shop",
+                        "sh_logi": "wrk_sh_logi",
+                        "sh_indu": "wrk_sh_indu"
+                    }
+                },
+                {
+                    "result": "builtar",
+                    "column": "lnd_builtar"
+                },
+                {
+                    "result": "detach",
+                    "column": "lnd_detach"
+                },
+                {
+                    "result": "compreh",
+                    "column": "edu_compreh"
+                },
+                {
+                    "result": "secndry",
+                    "column": "edu_secndry"
+                },
+                {
+                    "result": "tertiary",
+                    "column": "edu_tertiary"
+                }
+            ]
+        }
+    ] 
+}
+
+
