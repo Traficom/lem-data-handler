@@ -9,17 +9,17 @@ class MissingDependencyError(RuntimeError):
 
 class CyclicDependencyError(RuntimeError):
     def __init__(self, msg: str):
-        super(msg)
+        super().__init__(msg)
 
 class InvalidModuleError(RuntimeError):
     def __init__(self, msg: str):
-        super(msg)
+        super().__init__(msg)
 
 
 
 class Environment:
 
-    modules: set[Module]
+    modules: Set[Module]
     providers: Dict[str, Module]
     variables: Dict[str, CachedValue]
     
@@ -73,11 +73,9 @@ class Environment:
                 data with scope equal or higher than specified phase will be reset. 
                 Defaults to Phase.GLOBAL (resets all data).
         """
-        discarded = [self.variables.pop(k) 
-                     for k, v in self.variables.items() if v.scope >= phase]
-        if discarded:
-            self._valid = False
-
+        discarded_keys = [k for k, v in self.variables.items() if v.scope >= phase]
+        [self.variables.pop(k) for k in discarded_keys]
+        
     def _get_module_input(self, module: Module) -> Dict[str, Any]:
         req = [(k, self[k]) for k in module.requires]
         opt = [(k, self[k]) for k in module.optional 
