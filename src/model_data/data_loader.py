@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Iterable, List, NamedTuple, Tuple, cast
+from typing import Any, Dict, Iterable, List, NamedTuple, Tuple, cast
 
 try:
     from typing import Protocol
@@ -103,6 +103,7 @@ class ColumnConfig(NamedTuple):
     
 class DataFileConfig(NamedTuple):
     data_file: Path
+    extra_arguments: Dict[str, Any]
     aggregation: Aggregation
     columns: List[ColumnConfig]
 
@@ -125,9 +126,9 @@ def combine_zone_data(mapped_data: Iterable[Tuple[ZoneMappedData,
     rest: Iterable[Tuple[ZoneMappedData, Dict[str, CollisionHandler]]] = mapped_data[1:]
     assert all([first.mapping == r[0].mapping for r in rest]), \
         "Trying to combine data with different zone mappings"
-    result = pd.DataFrame(first)
-    for new_data, on_collision  in rest:
-        for col_name, col_values in new_data.items():
+    result = pd.DataFrame(first.data)
+    for new_data, on_collision in rest:
+        for col_name, col_values in new_data.data.items():
             result[col_name] = on_collision[col_name](result[col_name], col_values) \
                 if col_name in result else col_values
     return ZoneMappedData(first.mapping, result)
@@ -143,9 +144,10 @@ def load_files(configs: Iterable[DataFileConfig],
     Returns:
         ZoneMappedData: Loaded data with aggregation and collision handling applied.
     """
-    loaded_data = List[ZoneMappedData]
+    loaded_data :List[Tuple[ZoneMappedData, CollisionHandler]] = []
     for file_config in configs:
-        data: gpd.GeoDataFrame = gpd.read_file(file_config.data_file)
+        data: gpd.GeoDataFrame = gpd.read_file(filename=file_config.data_file,
+                                               **file_config.extra_arguments)
         results = gpd.GeoDataFrame(index=data.index, geometry=data.geometry)
         on_collision = {}
         for col in file_config.columns:
@@ -161,8 +163,61 @@ def load_files(configs: Iterable[DataFileConfig],
                     axis=1)
             else:
                 results[col.result] = data[col.column].astype(float)
-        if results.geometry and data.geometry.isnull().all():
+        if results.geometry is not None and data.geometry.isnull().all():
             results.pop(results.geometry.name)
         loaded_data.append(( file_config.aggregation(zone_mapping, results), 
                              on_collision ))
     return combine_zone_data(loaded_data)
+
+def _get_aggregation(conf: Dict[str, Any]) -> Aggregation:
+    """Helper funcion to convert config to Aggregation class
+
+    Args:
+        conf (Dict[str, Any]): Config section
+
+    Returns:
+        Aggregation: Aggregation function from the config definition
+    """
+    AGGREGATIONS = {
+        'INDEX': lambda x: IndexAggregation(index_column=x.get('index_column', None)),
+        'AREA_SHARE': lambda x: AreaShareAggregation(),
+        'LARGEST_AREA': lambda x: LargestAreaAggregation(),
+    }
+    return AGGREGATIONS[conf['aggregation']](conf)
+
+def _get_collision_handler(conf: Dict[str, Any]) -> CollisionHandler:
+    """Helper function for converting config to CollisionHandler
+
+    Args:
+        conf (Dict[str, Any]): Config section
+
+    Returns:
+        CollisionHandler: CollisionHandler from the config
+    """
+    COLLISION = {
+        'RAISE': RaiseCollisionHandler(),
+        'REPLACE': ReplaceCollisionHandler(),
+        'ADD': AddCollisionHandler(),
+    }
+    return COLLISION[conf.get('on_collision', 'RAISE')]
+
+
+def section_to_config(file_conf: Dict[str, Any]) -> DataFileConfig:
+    """Helper function for parsing the JSON configuration
+
+    Args:
+        file_conf (Dict[str, Any]): Datafile configuration section
+
+    Returns:
+        ZoneDataConfig: ZoneDataConfig object with data read from the config section.
+    """
+    columns = [ColumnConfig(x['result'],
+                            x['column'],
+                            x['shares'].copy() if 'shares' in x else None,
+                            _get_collision_handler(x))
+                    for x in file_conf['columns']]
+    return DataFileConfig(data_file = Path(file_conf['file']['file_name']),
+                          extra_arguments=file_conf['file']['extra'],
+                          aggregation = _get_aggregation(file_conf),
+                          columns=columns)
+
