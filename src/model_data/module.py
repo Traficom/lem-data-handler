@@ -3,14 +3,21 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import Enum
+from functools import total_ordering
 from typing import Any, Dict, Iterable, NamedTuple, Set
 
+@total_ordering
 class Phase(Enum):
     GLOBAL = 0
     SCENARIO = 1
     DEMAND_ITERATION = 2
     TIME_PERIOD = 3
     ASSIGNMENT = 4
+    
+    def __lt__(self, other: Phase):
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        return NotImplemented
 
 class CachedValue(NamedTuple):
     value: Any
