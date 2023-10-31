@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import Callable, Dict, Iterable, NamedTuple, cast
 try:
     from typing import Protocol
@@ -11,6 +12,8 @@ import pandas as pd
 import geopandas as gpd
 from model_data.data_item import DataItem
 from model_data.zone_mapping import ZoneMapping
+
+logger = logging.getLogger(__name__)
 
 class ZoneMappedData(NamedTuple):
     """Container for model data mapped to a target ZoneMapping"""
@@ -107,10 +110,9 @@ def _get_intersection(input_data: gpd.GeoDataFrame,
     data_areas: pd.Series[float] = input_data.area
     if validate:
         if not mapping.has_geometry():
-            raise ValueError("Used zone mapping has missing or zero area polygons.")
+            raise ValueError('Used zone mapping has missing or zero area polygons.')
         if (data_areas.isnull().any() or data_areas.isin([None, 0.0]).any()):
-            raise ValueError(
-                "Given input data has missing or zero area polygon geometries.")
+            logger.warning('Given input data has missing or zero area polygon geometries.')
             
     data_areas.name = _unused_name(input_data.columns, 'area')
     
