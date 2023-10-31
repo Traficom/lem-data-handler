@@ -152,7 +152,7 @@ def _area_share(intersection: _IntersectionResult) -> pd.DataFrame:
     """
     return intersection.data.mul(intersection.data_area_share, axis=0)\
         .groupby(intersection.zone_ids)\
-        .sum()
+        .sum(numeric_only=False)
         
 def _largest_area(intersection: _IntersectionResult) -> pd.DataFrame:
     """Intersection aggregation helper that picks the data from the
