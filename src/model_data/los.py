@@ -7,7 +7,8 @@ from tables.carray import CArray
 
 import logging
 from pathlib import Path
-from typing import Dict, List, NamedTuple, Tuple, cast
+from os import unlink
+from typing import Dict, Iterable, List, NamedTuple, Tuple, cast
 
 from model_data.zone_mapping import ZoneMapping, IncompatibleZoneException
 
@@ -15,10 +16,13 @@ import numpy as np
 import numpy.typing as npt
 import openmatrix as omx
 
+from tempfile import NamedTemporaryFile
+
 logger = logging.getLogger(__name__)
 
 LOSDtype = np.float16
-LOS_MISSING =  np.finfo(LOSDtype).max
+LOS_MISSING =  np.inf
+LOS_MAX = np.finfo(LOSDtype).max
 
 
 class OMXSpecification(NamedTuple):
@@ -68,48 +72,43 @@ def get_helmet_matrix_spec(base_dir: Path) -> Dict[TimePeriod, Dict[LOSType,
         TimePeriod.IHT: 'iht'        
     }
 
-    los_types = {
-        LOSType.CAR_WORK_COST: ('cost', 'car_work'),
-        LOSType.CAR_LEISURE_COST: ('cost', 'car_leisure'),
-        LOSType.CAR_WORK_DISTANCE: ('dist', 'car_work'),
-        LOSType.CAR_LEISURE_DISTANCE: ('dist', 'car_leisure'),
-        LOSType.CAR_WORK_TIME: ('time', 'car_work'),
-        LOSType.CAR_LEISURE_TIME: ('time', 'car_leisure'),
-
-        LOSType.TRANSIT_WORK_COST: ('cost', 'transit_work'),
-        LOSType.TRANSIT_LEISURE_COST: ('cost', 'transit_leisure'),
-        LOSType.TRANSIT_WORK_DISTANCE: ('dist', 'transit_work'),
-        LOSType.TRANSIT_LEISURE_DISTANCE: ('dist', 'transit_leisure'),
-        LOSType.TRANSIT_WORK_TIME: ('time', 'transit_work'),
-        LOSType.TRANSIT_LEISURE_TIME: ('time', 'transit_leisure'),
-        
-        LOSType.TRUCK_COST: ('cost', 'truck'),
-        LOSType.TRAILER_TRUCK_COST: ('cost', 'trailer_truck'),
-        LOSType.TRUCK_TIME: ('time', 'truck'),
-        LOSType.TRAILER_TRUCK_TIME: ('time', 'trailer_truck'),
-        LOSType.TRUCK_DIST: ('dist', 'truck'),
-        LOSType.TRAILER_TRUCK_DIST: ('dist', 'trailer_truck'),
-        
-        LOSType.WALK_TIME: ('time', 'walk'),
-        LOSType.WALK_DISTANCE: ('dist', 'walk'),
-        LOSType.BIKE_TIME: ('time', 'bike'),
-        LOSType.BIKE_DISTANCE: ('dist', 'bike'),
-        
-        LOSType.CAR_FIRST_MILE_COST: ('cost', 'car_first_mile'),
-        LOSType.CAR_FIRST_MILE_DIST: ('dist', 'car_first_mile'),
-        LOSType.CAR_FIRST_MILE_TIME: ('time', 'car_first_mile'),
-        LOSType.CAR_LAST_MILE_COST: ('cost', 'car_last_mile'),
-        LOSType.CAR_LAST_MILE_DIST: ('dist', 'car_last_mile'),
-        LOSType.CAR_LAST_MILE_TIME: ('time', 'car_last_mile'),
+    all_combinations = {
+        LOSMode.CAR_WORK: 'car_work',
+        LOSMode.CAR_LEISURE: 'car_leisure',
+        LOSMode.TRANSIT_WORK: 'transit_work',
+        LOSMode.TRANSIT_LEISURE: 'transit_leisure',
+        LOSMode.TRUCK: 'truck',
+        LOSMode.TRAILER_TRUCK: 'trailer_truck',
+        LOSMode.CAR_FIRST_MILE: 'car_first_mile',
+        LOSMode.CAR_LAST_MILE: 'car_last_mile',
     }
+
+    no_cost_combinations = {
+        LOSMode.WALK: 'walk',
+        LOSMode.BIKE: 'bike',
+    }
+    
+    los_modes = {**all_combinations, **no_cost_combinations}
+
+    los_types = {
+        LOSType.COST: 'cost',
+        LOSType.DIST: 'dist',
+        LOSType.TIME: 'time',
+    }
+    
+    los_combinations = \
+        [(m, t) for m in all_combinations.keys() 
+        for t in los_types.keys()] + \
+        [(m, t) for m in no_cost_combinations.keys()
+         for t in [LOSType.DIST, LOSType.TIME]]
     
     return dict(
         [(time_period, 
-          dict([(los_type, 
-                 OMXSpecification(base_dir / (los_types[los_type][0] + '_' + \
+          dict([(los, 
+                 OMXSpecification(base_dir / (los_types[los[1]] + '_' + \
                      time_periods[time_period] + '.omx'), 
-                                  los_types[los_type][1]))
-                for los_type in LOSType]))
+                                  los_modes[los[0]]))
+                for los in los_combinations]))
           for time_period in TimePeriod])
 
 
@@ -119,32 +118,18 @@ class LOSMatrix:
     """Zone mapping the matrix is using"""
     _data: npt.NDArray[LOSDtype]
     """Matrix data"""
-    
+        
     @classmethod
     def zeros_like(cls, other: LOSMatrix):
         """Builds new LOSMatrix with identical parameters to the specified matrix
         but with all values zeroed."""
         return LOSMatrix(other._mapping, np.zeros_like(other.to_numpy()))
     
+    
     @classmethod
-    def from_omx(cls,
+    def from_omx_to_mem(cls,
                  omx_spec: OMXSpecification,
-                 mapping: ZoneMapping | None = None,
-                 validate: bool = True) -> LOSMatrix:
-        """Reads LOSMatrix from OMX file
-
-        Args:
-            filename (Path): Path to the OMX file
-            mapping (ZoneMapping): Zone mapping to use with the matrix. If None, the 
-                mapping will be automatically generated from the OMX file
-            matrix_name (str): Name of the matrix in the file
-            validate (bool, optional): If set to True the zone numbers area validated 
-                against the ZoneMapping. Defaults to True.
-
-        Returns:
-            LOSMatrix: LOS matrix with the data loaded from the OMX file
-        """
-        
+                 mapping: ZoneMapping | None = None) -> LOSMatrix:
         file = omx.open_file(omx_spec.file, mode='r')
         matrix = np.array(file[omx_spec.matrix]).astype(LOSDtype)
         zones_in_file = file.map_entries('zone_number')
@@ -152,19 +137,38 @@ class LOSMatrix:
         if mapping is None:
             # Create mapping from OMX file
             mapping = ZoneMapping.from_omx(omx_spec.file)
-        elif validate and (zones_in_file != mapping.zones):
+        elif zones_in_file != mapping.zones:
             raise IncompatibleZoneException(
                 'zone_numbers in OMX file do not match the used zone mapping')
         return LOSMatrix(mapping, matrix)
+    
+    @classmethod
+    def from_omx(cls,
+                 omx_spec: OMXSpecification,
+                 mapping: ZoneMapping | None = None) -> LOSMatrix:
+        """Reads LOSMatrix from OMX file
+
+        Args:
+            filename (Path): Path to the OMX file
+            mapping (ZoneMapping): Zone mapping to use with the matrix. If None, the 
+                mapping will be automatically generated from the OMX file
+            matrix_name (str): Name of the matrix in the file
+
+        Returns:
+            LOSMatrix: LOS matrix with the data loaded from the OMX file
+        """
+        
+        return OMXLOSMatrix(filepath=omx_spec.file,
+                            matrix_name=omx_spec.matrix,
+                            zone_mapping=mapping)
 
     @classmethod
     def from_subareas(cls,
-                        mapping: ZoneMapping,
-                        subareas: List[LOSMatrix],
-                        default_value: LOSDtype) -> LOSMatrix:
+                      mapping: ZoneMapping,
+                      subareas: List[LOSMatrix],
+                      default_value: LOSDtype) -> LOSMatrix:
         """Builds LOS matrix from a set of subarea matrices. The values outside the
         
-
         Args:
             mapping (ZoneMapping): Zone mapping for destination matrix
             subareas (List[LOSMatrix]): A list of submatrices
@@ -189,12 +193,27 @@ class LOSMatrix:
                                source_zones)
         return LOSMatrix(mapping, data)
         
-    def __init__(self, mapping: ZoneMapping, data: npt.NDArray[LOSDtype]):
-        if not (data.shape[0] == data.shape[1] == len(mapping)):
+    def __init__(self, mapping: ZoneMapping,
+                 data: npt.NDArray[LOSDtype],
+                 use_memmap=True,
+                 nmap_mode='r'):
+        if data is not None and not (data.shape[0] == data.shape[1] == len(mapping)):
             raise IncompatibleZoneException(
                 'Number of zones in the matrix does not match the zone mapping')
         self._mapping = mapping
-        self._data = data
+        if use_memmap and data is not None:
+            self._mmapfile = NamedTemporaryFile(delete=False)
+            np.save(self._mmapfile, data.astype(LOSDtype))
+            self._mmapfile.close()
+            self._data = np.load(self._mmapfile.name, mmap_mode=nmap_mode)
+        else:
+            self._mmapfile = None
+            self._data = data
+
+    def __del__(self):
+        if self._mmapfile is not None:
+            del self._data
+            unlink(self._mmapfile.name)
 
     def to_omx(self, omx_spec: OMXSpecification) -> None:
         """Writes LOSMatris into OMX file
@@ -210,9 +229,9 @@ class LOSMatrix:
         mat_name = omx_spec.matrix
         if mat_name in file:
             mat = cast(CArray, file[mat_name])
-            mat[...] = self._data
+            mat[...] = self.to_numpy()
         else:
-            mat = file.create_matrix(name=mat_name, obj=self._data)
+            mat = file.create_matrix(name=mat_name, obj=self.to_numpy())
         file.close()
     
     def to_numpy(self) -> npt.NDArray[LOSDtype]:
@@ -230,7 +249,7 @@ class LOSMatrix:
             npt.NDArray[ImpedanceDtype]: Numpy array containeing the LOS data for
                 the reverse trips.
         """
-        return self._data.T
+        return self.to_numpy().T
     
     def direction_weighted_sum(self,
                                weights: Tuple[float, float]) -> LOSMatrix:
@@ -274,50 +293,62 @@ class LOSMatrix:
         self._data += other._data
         return self
 
+class OMXLOSMatrix(LOSMatrix):
+    _filepath: Path
+    _file: omx.File
+    
+    _matrix_name: str
+    def __init__(self,
+                 filepath: Path,
+                 matrix_name: str,
+                 zone_mapping: ZoneMapping):
+        self._filepath = filepath
+        self._file = omx.open_file(filepath, mode='r')
+        zones_in_file = self._file.map_entries('zone_number')
+        if zone_mapping is None:
+            zone_mapping = ZoneMapping.from_omx(filepath)
+        elif zones_in_file != zone_mapping.zones:
+            raise IncompatibleZoneException(
+                'zone_numbers in OMX file do not match the used zone mapping')
+           
+        self._matrix_name = matrix_name
+        super().__init__(zone_mapping, data=None)
+    
+    def __del__(self):
+        self._file.close()
+    
+    def __getnewargs__(self):
+        return (self._filepath, self._matrix_name, self._mapping)
+    
+    def to_numpy(self):
+        return self._file[self._matrix_name][:]
+
 class TimePeriod(Enum):
     """Assignemtn time periods"""
     AHT=auto()
     PT=auto()
     IHT=auto()
+
+class LOSMode(Enum):
+    CAR_WORK=auto()
+    CAR_LEISURE=auto()
+    TRANSIT_WORK=auto()
+    TRANSIT_LEISURE=auto()
+    TRUCK=auto()
+    TRAILER_TRUCK=auto()
+    WALK=auto()
+    BIKE=auto()
+    CAR_LAST_MILE=auto()
+    CAR_FIRST_MILE=auto()
     
 class LOSType(Enum):
-    """Level-of-service types"""
-    CAR_WORK_COST=auto()
-    CAR_LEISURE_COST=auto()
-    CAR_WORK_DISTANCE=auto()
-    CAR_LEISURE_DISTANCE=auto()
-    CAR_WORK_TIME=auto()
-    CAR_LEISURE_TIME=auto()
-
-    TRANSIT_WORK_COST=auto()
-    TRANSIT_LEISURE_COST=auto()
-    TRANSIT_WORK_DISTANCE=auto()
-    TRANSIT_LEISURE_DISTANCE=auto()
-    TRANSIT_WORK_TIME=auto()
-    TRANSIT_LEISURE_TIME=auto()
-
-    TRUCK_COST=auto()
-    TRAILER_TRUCK_COST=auto()
-    TRUCK_TIME=auto()
-    TRAILER_TRUCK_TIME=auto()
-    TRUCK_DIST=auto()
-    TRAILER_TRUCK_DIST=auto()
-
-    WALK_TIME=auto()
-    WALK_DISTANCE=auto()
-    BIKE_TIME=auto()
-    BIKE_DISTANCE=auto()
-
-    CAR_FIRST_MILE_COST=auto()
-    CAR_FIRST_MILE_DIST=auto()
-    CAR_FIRST_MILE_TIME=auto()
-    CAR_LAST_MILE_COST=auto()
-    CAR_LAST_MILE_DIST=auto()
-    CAR_LAST_MILE_TIME=auto()
+    COST=auto()
+    DIST=auto()
+    TIME=auto()
 
 class LOSTimePeriod:
     """Container for various level-of-service matrices"""
-    _matrices: Dict[LOSType, LOSMatrix]
+    _matrices: Dict[Tuple[LOSMode, LOSType], LOSMatrix]
 
     @classmethod
     def zeros_like(cls, other: LOSTimePeriod) -> LOSTimePeriod:
@@ -338,19 +369,29 @@ class LOSTimePeriod:
         return LOSTimePeriod(new_matrices)
     
     
-    def __init__(self, los_matrices: Dict[LOSType, LOSMatrix]):
+    def __init__(self, los_matrices: Dict[Tuple[LOSMode, LOSType], LOSMatrix]):
         self._matrices = los_matrices
     
-    def __getitem__(self, type: LOSType) -> LOSMatrix:
+    def __getitem__(self, type: Tuple[LOSMode, LOSType]) -> LOSMatrix:
         """Returns the LOSMatrix for the specified LOS type
 
         Args:
-            type (LOSType): Level-of-service type
+            type (Tuple[LOSMode, LOSType]): Level-of-service mode and type
 
         Returns:
             _type_: Level-of-service matrix for the specified type
         """
         return self._matrices[type]
+    
+    def items(self) -> Iterable[Tuple[Tuple[LOSMode, LOSType], LOSMatrix]]:
+        """Returns an iterator over the included matrix types and content similarily
+            to the dict.items()
+
+        Returns:
+            Iterable[Tuple[Tuple[LOSMode, LOSType], LOSMatrix]]: Iterable tuples of
+                ((LOSMode, LOSType) LOSMatrix)
+        """
+        return self._matrices.items()
 
     def __add__(self, other: LOSTimePeriod):
         """Adds two LOSTimePeriods together
@@ -400,23 +441,26 @@ class LOSData:
             LOSData: New LOS Data constructed from the subareas.
         """
         los_periods: Dict[TimePeriod, LOSTimePeriod] = {}
-        for time_period in TimePeriod:
-            los_matrices: Dict[LOSType, LOSMatrix] = {}
-            for los_type in LOSType:
-                submatrices = [sub[time_period][los_type] for sub in subareas]
+        first = subareas[0]
+        for time_period, time_period_data in first.items():
+            los_matrices: Dict[Tuple[LOSMode, LOSType], LOSMatrix] = {}
+            for los, _ in time_period_data.items():
                 if isinstance(default_values, Dict):
-                    default_value = default_values[los_type]
+                    default_value = default_values[los[1]]
                 else:
                     default_value = default_values
-                los_matrices[los_type] = LOSMatrix.from_subareas(mapping, 
-                                                                submatrices,
-                                                                default_value)
+                submatrices = [sub[time_period][los] \
+                                for sub in subareas]
+                los_matrices[los] \
+                    = LOSMatrix.from_subareas(mapping, 
+                                                submatrices,
+                                                default_value)
             los_periods[time_period] = LOSTimePeriod(los_matrices)
         return LOSData(los_periods)
     
     @classmethod
     def from_omx_files(cls,
-                       omx_specs: Dict[TimePeriod, Dict[LOSType, 
+                       omx_specs: Dict[TimePeriod, Dict[Tuple[LOSMode, LOSType], 
                                                         OMXSpecification]],
                        mapping: ZoneMapping | None = None) -> LOSData:
         """Loads LOS data from OMX files.
@@ -432,9 +476,9 @@ class LOSData:
             LOSData: New LOS data from the OMX files.
         """
         los_periods: Dict[TimePeriod, LOSTimePeriod] = {}
-        for time_period in TimePeriod:
+        for time_period, time_period_data in omx_specs.items():
             los_matrices: Dict[LOSType, LOSMatrix] = {}
-            for los_type in LOSType:
+            for los_type, _ in time_period_data.items():
                 omx_spec = omx_specs[time_period][los_type]
                 los_matrices[los_type] = LOSMatrix.from_omx(omx_spec,
                                                             mapping)
@@ -494,6 +538,15 @@ class LOSData:
         """
         return self._data[time_period]
 
+    def items(self) -> Iterable[Tuple[TimePeriod, LOSTimePeriod]]:
+        """Return items included in the LOSData similarily to dict.items()
+
+        Returns:
+            Iterable[Tuple[TimePeriod, LOSTimePeriod]]: Iterable tuples of TimePeriod
+                and correspondin LOSTimePeriod
+        """
+        return self._data.items()
+    
     def get_averaged_los(self,
                      weights: Dict[TimePeriod, Tuple[float, float]]) -> LOSTimePeriod:
         """Returns and averaged LOS over all the time periods and directions.

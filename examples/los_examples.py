@@ -1,23 +1,26 @@
 """Loads Level-of-Service data from individual subarea matrices"""
+import time
 from pathlib import Path
-from typing import List
-from model_data.los import LOS_MISSING, LOSData, get_helmet_matrix_spec, LOSType, TimePeriod
-from model_data.zone_mapping import ZoneMapping
 
+from model_data.los import (LOSData, LOSMode, LOSType, TimePeriod,
+                            get_helmet_matrix_spec)
+
+st = time.process_time()
 
 # Path to the LOS directory
-LOS_PATH= Path('./los')
+LOS_PATH= Path('./Pohjois-Suomi')
 
 # Load LOS using Helmet naming scheme
 los = LOSData.from_omx_files(get_helmet_matrix_spec(LOS_PATH),
                                                mapping=None)
 
 # Get AHT transit time
-aht_transit_time = los[TimePeriod.AHT][LOSType.TRANSIT_TIME].to_numpy()
+aht_transit_time = los[TimePeriod.AHT][(LOSMode.TRANSIT_WORK, LOSType.TIME)].to_numpy()
 print(aht_transit_time)
 
 # Get LOS for return trip
-aht_transit_return_trips = los[TimePeriod.AHT][LOSType.TRANSIT_TIME].reverse_trip()
+aht_transit_return_trips = \
+    los[TimePeriod.AHT][(LOSMode.TRANSIT_WORK, LOSType.TIME)].reverse_trip()
 print(aht_transit_return_trips)
 
 # Define demand distribution and direction for each time period
@@ -31,6 +34,10 @@ average_los = los.get_averaged_los(demand_distribution)
 print(average_los)
 
 # Get averaged transit time
-average_transit_time = average_los[LOSType.TRANSIT_TIME].to_numpy()
+average_transit_time = average_los[(LOSMode.TRANSIT_WORK, LOSType.TIME)].to_numpy()
 
 print(average_transit_time)
+
+del los
+
+print('CPU Execution time:', time.process_time() - st, 'seconds')
