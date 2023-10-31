@@ -47,7 +47,7 @@ class DataItem(Generic[KT]):
             uncategorized = 0 if uncategorized_total is None else uncategorized_total
             self.total = uncategorized + sum(category_totals.values())
             self._categories = dict(zip(category_totals.keys(),
-                                        [x/self.total 
+                                        [(x/self.total if self.total != 0.0 else 0.0)
                                          for x in category_totals.values()]))
             return
         raise ValueError(
@@ -157,6 +157,8 @@ class DataItem(Generic[KT]):
             return DataItem(category_totals=categories,
                             uncategorized_total=uncategorized)
         return DataItem(self.total+other, self._categories)
+
+    __radd__ = __add__
     
     def __mul__(self, other: float) -> DataItem[KT]:
         """Scales the DataItem with a float value.
@@ -248,3 +250,27 @@ def dataframe_to_data_items(df: DataFrame,
                         category_proportions=dict(zip(category_columns.keys(),
                                         [row[x] for x in category_columns.values()])))
     return df.apply(_row_to_data_item, axis=1)
+
+def data_items_to_dataframe(data: Series[DataItem],
+                            category_names: Dict[KT, str]|None = None) -> DataFrame:
+    """Converts DataItem Series to DataFrame of total value and shares. Total value
+        will be named according to the Series name and the categories using the given
+        category_names or str type category names, if category_names is None.
+
+    Args:
+        data (Series[DataItem]): Pandas Series of DataItems
+        category_names (Dict[KT, str] | None, optional): Mapping of categories to column
+            names. If None, the categories must be str. Defaults to None.
+
+    Returns:
+        DataFrame: DataFrame with 
+    """
+    if len(data) < 1:
+        return DataFrame()
+    categories = data.iloc[0].get_categorized().keys()
+    if category_names is None:
+        category_names = dict([(c, c) for c in categories])
+        
+    res = {data.name: data.apply(lambda x: x.total)}
+    res.update(dict([(category_names[c], data.apply(lambda x: x._categories[c])) for c in categories]))
+    return DataFrame(data=res, index=data.index)
