@@ -65,7 +65,6 @@ class Zone():
         """Centroid of the zone"""
         return self._mapping.zone_data.iloc[self._offset].centroid
 
-
     @property
     def polygon(self) -> Polygon:
         """Borders of the zone"""
@@ -234,6 +233,14 @@ class ZoneMapping:
             Iterator[Iterable[Zone]]: _description_
         """
         return ZoneIterator(self)
+
+    @property
+    def centroids(self) -> GeoSeries[Point]:
+        return GeoSeries(self.zone_data['centroid'])
+
+    @property
+    def polygons(self) -> GeoSeries[Polygon]:
+        return GeoSeries(self.zone_data['polygon'])
     
     @property
     def zones(self) -> List[int]:
