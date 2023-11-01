@@ -1,7 +1,9 @@
 
 from concurrent.futures import Executor, Future, wait
 from typing import Any, Dict, Sequence, Set
-from model_data.module import Module, CachedValue, Phase
+
+from model_data.module import CachedValue, Module, Phase
+
 
 class MissingDependencyError(RuntimeError):
     def __init__(self, msg: str):
@@ -28,6 +30,9 @@ class Environment:
         self.providers = {}
         self.variables = {}
         
+    def __contains__(self, key) -> bool:
+        return key in self.registered_variables
+    
     def __getitem__(self, item: str) -> Any:
         if item in self.variables:
             return self.variables[item].value
@@ -126,3 +131,4 @@ class Environment:
                 module = futures_to_modules.pop(future)
                 self._process_module_results(module, future.result())
                 enqueue(self._ready_to_process())
+
