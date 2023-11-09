@@ -1,28 +1,32 @@
 """Trip impedance processing"""
 from __future__ import annotations
-from enum import Enum, auto
-import lzma
-import pickle
-from tables.carray import CArray
 
 import logging
-from pathlib import Path
+import lzma
+import pickle
+from enum import Enum, auto
 from os import unlink
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Dict, Iterable, List, NamedTuple, Tuple, cast
 
-from model_data.zone_mapping import ZoneMapping, IncompatibleZoneException
-
 import numpy as np
-import numpy.typing as npt
-import openmatrix as omx
 
-from tempfile import NamedTemporaryFile
+try:
+    import numpy.typing as npt
+except ImportError:
+    pass
+import openmatrix as omx
+from tables.carray import CArray
+
+from model_data.zone_mapping import IncompatibleZoneException, ZoneMapping
 
 logger = logging.getLogger(__name__)
 
 LOSDtype = np.float16
 LOS_MISSING =  np.inf
 LOS_MAX = np.finfo(LOSDtype).max
+LOS_MIN = np.finfo(LOSDtype).min
 
 
 class OMXSpecification(NamedTuple):
@@ -32,10 +36,10 @@ class OMXSpecification(NamedTuple):
     matrix: str
     """Name of the matrix object in the file"""
 
-def _replace_submatrix(matrix: npt.NDArray[LOSDtype],
-                       zones: npt.NDArray[np.uint32],
-                       submatrix: npt.NDArray[LOSDtype],
-                       subzones: npt.NDArray[np.uint32]):
+def _replace_submatrix(matrix: 'npt.NDArray[LOSDtype]',
+                       zones: 'npt.NDArray[np.uint32]',
+                       submatrix: 'npt.NDArray[LOSDtype]',
+                       subzones: 'npt.NDArray[np.uint32]'):
     """Replaces the selected area of the first input matrix with the specified
         submatrix inplace
 
@@ -53,7 +57,8 @@ def _replace_submatrix(matrix: npt.NDArray[LOSDtype],
         raise IncompatibleZoneException(
             "Subarea zones do not match the target mapping.")
 
-    matrix[np.ix_(matching_indices,matching_indices)] = submatrix
+    matrix[np.ix_(matching_indices,matching_indices)] \
+        = submatrix.clip(min=LOS_MIN, max=LOS_MAX)
 
 def get_helmet_matrix_spec(base_dir: Path) -> Dict[TimePeriod, Dict[LOSType, 
                                                         OMXSpecification]]:
@@ -116,7 +121,7 @@ class LOSMatrix:
     """Representation of a single Level-of-Service matrix"""
     _mapping: ZoneMapping
     """Zone mapping the matrix is using"""
-    _data: npt.NDArray[LOSDtype]
+    _data: 'npt.NDArray[LOSDtype]'
     """Matrix data"""
         
     @classmethod
@@ -179,7 +184,7 @@ class LOSMatrix:
             LOSMatrix: LOS matrix in the destination zone mapping
         """
         
-        data: npt.NDArray[LOSDtype] = np.full(
+        data: 'npt.NDArray[LOSDtype]' = np.full(
             shape=(len(mapping), len(mapping)),
             fill_value=default_value,
             dtype=LOSDtype)
@@ -194,7 +199,7 @@ class LOSMatrix:
         return LOSMatrix(mapping, data)
         
     def __init__(self, mapping: ZoneMapping,
-                 data: npt.NDArray[LOSDtype],
+                 data: 'npt.NDArray[LOSDtype]',
                  use_memmap=True,
                  nmap_mode='r'):
         if data is not None and not (data.shape[0] == data.shape[1] == len(mapping)):
@@ -234,7 +239,7 @@ class LOSMatrix:
             mat = file.create_matrix(name=mat_name, obj=self.to_numpy())
         file.close()
     
-    def to_numpy(self) -> npt.NDArray[LOSDtype]:
+    def to_numpy(self) -> 'npt.NDArray[LOSDtype]':
         """Returns the LOS data as numpy array.
 
         Returns:
@@ -242,7 +247,7 @@ class LOSMatrix:
         """
         return self._data
     
-    def reverse_trip(self) -> npt.NDArray[LOSDtype]:
+    def reverse_trip(self) -> 'npt.NDArray[LOSDtype]':
         """Returns the LOS data for the reversed trips as numpy array.
 
         Returns:
@@ -316,6 +321,7 @@ class OMXLOSMatrix(LOSMatrix):
     
     def __del__(self):
         self._file.close()
+        del self._file
     
     def __getnewargs__(self):
         return (self._filepath, self._matrix_name, self._mapping)
@@ -506,7 +512,7 @@ class LOSData:
     
 
     def to_omx_files(self,
-                     omx_specs: Dict[TimePeriod, Dict[LOSType, 
+                     omx_specs: Dict[TimePeriod, Dict[Tuple[LOSMode, LOSType], 
                                                         OMXSpecification]]) -> None:
         """Writes Level-of-Service data into OMX files according the given naming scehme
 
@@ -515,9 +521,9 @@ class LOSData:
                 scheme
         """
         for time_period in TimePeriod:
-            for los_type in LOSType:
-                omx_spec = omx_specs[time_period][los_type]
-                self._data[time_period][los_type].to_omx(omx_spec)
+            for los_category in self._data[time_period]._matrices.keys():
+                omx_spec = omx_specs[time_period][los_category]
+                self._data[time_period][los_category].to_omx(omx_spec)
     
     def to_pickle(self, filename: Path) -> None:
         """Saves LOS data as LZMA compressed pickle.
@@ -563,4 +569,5 @@ class LOSData:
             for los_type in result._matrices.keys():
                 result._matrices[los_type] \
                     += self._data[time_period][los_type].direction_weighted_sum(weight)
+        return result
         return result

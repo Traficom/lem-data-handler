@@ -4,10 +4,13 @@
 
 from pathlib import Path
 from typing import Dict, List
-from model_data.los import (LOS_MISSING, LOSData, get_helmet_matrix_spec, TimePeriod,
-                            LOSType, LOSDtype, LOSMatrix, LOSTimePeriod)
-from model_data.zone_mapping import ZoneMapping
+
 import numpy as np
+
+from model_data.los import (LOS_MAX, LOS_MISSING, LOSData, LOSDtype, LOSMatrix,
+                            LOSTimePeriod, LOSType, TimePeriod,
+                            get_helmet_matrix_spec)
+from model_data.zone_mapping import ZoneMapping
 
 BASE_PATH = Path('../../../SharePoint/T')
 
@@ -56,7 +59,7 @@ def gen_test_data():
     los.to_omx_files(get_helmet_matrix_spec(target_path))
 
 
-if __name__ == '__main__':
+def main():
     #gen_test_data()
     # Generate zone mapping for target national model
     national_mapping = ZoneMapping.from_gpkg(TARGET_MAPPING_GPKG)
@@ -66,13 +69,30 @@ if __name__ == '__main__':
 
     # Generate LOS data from subareas using LOG_MISSING as default value for
     # zone pairs not defined in the subareas
-    national_los = LOSData.from_subareas(national_mapping, subareas, LOS_MISSING)
+    national_los = LOSData.from_subareas(national_mapping, subareas, LOS_MAX)
 
     # Write national LOS data into OMX files using Helmet naming scheme
     national_los.to_omx_files(get_helmet_matrix_spec(TARGET_PATH))
-    national_los.to_pickle(TARGET_PATH / 'national.pkl')
+    #national_los.to_pickle(TARGET_PATH / 'national.pkl')
 
-    national_los_from_pickle = LOSData.from_pickle(TARGET_PATH / 'national.pkl')
-    national_los_from_omx = LOSData.from_omx_files(get_helmet_matrix_spec(TARGET_PATH),
-                                                 mapping=None)
+    #national_los_from_pickle = LOSData.from_pickle(TARGET_PATH / 'national.pkl')
+    #national_los_from_omx = LOSData.from_omx_files(get_helmet_matrix_spec(TARGET_PATH),
+    #                                             mapping=None)
     print('done')
+    # Write national LOS data into OMX files using Helmet naming scheme
+    #national_los.to_omx_files(get_helmet_matrix_spec(TARGET_PATH))
+    #national_los.to_pickle(TARGET_PATH / 'national.pkl')
+
+    #national_los_from_pickle = LOSData.from_pickle(TARGET_PATH / 'national.pkl')
+    #national_los_from_omx = LOSData.from_omx_files(get_helmet_matrix_spec(TARGET_PATH),
+    #                                             mapping=None)
+    print('done')    #national_los.to_omx_files(get_helmet_matrix_spec(TARGET_PATH))
+    #national_los.to_pickle(TARGET_PATH / 'national.pkl')
+
+    #national_los_from_pickle = LOSData.from_pickle(TARGET_PATH / 'national.pkl')
+    #national_los_from_omx = LOSData.from_omx_files(get_helmet_matrix_spec(TARGET_PATH),
+    #                                             mapping=None)
+    print('done')
+
+if __name__ == '__main__':
+    main()
