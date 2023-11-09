@@ -1,6 +1,7 @@
 """Data loaders for importing data into the model zone mapping"""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, NamedTuple, Tuple, cast
 
@@ -9,19 +10,17 @@ try:
 except ImportError:
     # Protocol not supported in older python 3.7 (Emme)
     from typing_extensions import Protocol
+
 import geopandas as gpd
 import pandas as pd
-from model_data.aggregation import (
-    Aggregation,
-    apply_default_values,
-    AreaShareAggregation,
-    IndexAggregation,
-    LargestAreaAggregation,
-    ZoneMappedData,
-)
+
+from model_data.aggregation import (Aggregation, AreaShareAggregation,
+                                    IndexAggregation, LargestAreaAggregation,
+                                    ZoneMappedData, apply_default_values)
 from model_data.constants import GEO_ENGINE
 from model_data.data_item import DataItem
 from model_data.zone_mapping import ZoneMapping
+
 
 def load_data(mapping: ZoneMapping,
                   filepath: Path,
@@ -145,6 +144,7 @@ def load_files(configs: Iterable[DataFileConfig],
         ZoneMappedData: Loaded data with aggregation and collision handling applied.
     """
     loaded_data :List[Tuple[ZoneMappedData, CollisionHandler]] = []
+
     for file_config in configs:
         data: gpd.GeoDataFrame = gpd.read_file(filename=file_config.data_file,
                                                **file_config.extra_arguments)
@@ -153,19 +153,18 @@ def load_files(configs: Iterable[DataFileConfig],
         for col in file_config.columns:
             on_collision[col.result] = col.collision_handler
             if col.shares is not None:
-                assert col.shares is not None
-                results[col.result] = data.apply(lambda x: 
+                results[col.result] = data.apply(lambda x:
                     DataItem(total = x[col.column],
-                             category_proportions=dict([(k, x[v]) for k, v in 
-                                                        (col.shares.items() 
-                                                         if col.shares 
+                             category_proportions=dict([(k, x[v]) for k, v in
+                                                        (col.shares.items()
+                                                         if col.shares
                                                          else (None, None))])),
                     axis=1)
             else:
                 results[col.result] = data[col.column].astype(float)
         if results.geometry is not None and data.geometry.isnull().all():
             results.pop(results.geometry.name)
-        loaded_data.append(( file_config.aggregation(zone_mapping, results), 
+        loaded_data.append(( file_config.aggregation(zone_mapping, results),
                              on_collision ))
     return combine_zone_data(loaded_data)
 
@@ -202,7 +201,8 @@ def _get_collision_handler(conf: Dict[str, Any]) -> CollisionHandler:
     return COLLISION[conf.get('on_collision', 'RAISE')]
 
 
-def section_to_config(file_conf: Dict[str, Any]) -> DataFileConfig:
+def section_to_config(file_conf: Dict[str, Any],
+                      base_dir: Path = Path('.')) -> DataFileConfig:
     """Helper function for parsing the JSON configuration
 
     Args:
@@ -216,7 +216,15 @@ def section_to_config(file_conf: Dict[str, Any]) -> DataFileConfig:
                             x['shares'].copy() if 'shares' in x else None,
                             _get_collision_handler(x))
                     for x in file_conf['columns']]
-    return DataFileConfig(data_file = Path(file_conf['file']['file_name']),
+    file_path = Path(file_conf['file']['file_name'])
+    if not file_path.is_absolute():
+        file_path = base_dir / file_path
+    return DataFileConfig(data_file = file_path,
+                          extra_arguments=file_conf['file']['extra'],
+                          aggregation = _get_aggregation(file_conf),
+                          columns=columns)
+
+    return DataFileConfig(data_file = file_path,
                           extra_arguments=file_conf['file']['extra'],
                           aggregation = _get_aggregation(file_conf),
                           columns=columns)
