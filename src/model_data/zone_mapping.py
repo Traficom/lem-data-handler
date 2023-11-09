@@ -3,15 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable, List, cast
-import pandera as pa
-from pandera.typing import  Index, DataFrame
-from pandera.typing.geopandas import  GeoSeries
 
-from model_data.constants import GEO_ENGINE
 import geopandas as gpd
+import openmatrix as omx
 import pandas as pd
 from shapely.geometry import Point, Polygon
-import openmatrix as omx
+
+from model_data.constants import GEO_ENGINE
 
 SELECTED_ZONE_DATA = [
     'centroid',
@@ -27,11 +25,22 @@ class IncompatibleZoneException(Exception):
         super().__init__(message)
     
 
-class ZoneDataSchema(pa.DataFrameModel):
-    """Schema definition for zone data"""
-    zone_id: Index[pa.Int64] = pa.Field(ge=0, check_name=True)
-    centroid: GeoSeries[Point] = pa.Field(nullable=True)
-    polygon: GeoSeries[Polygon] = pa.Field(nullable=True)
+try:
+    import pandera as pa
+    from pandera.typing import DataFrame, Index
+    from pandera.typing.geopandas import GeoSeries
+    USE_DATA_VALIDATION = True
+    class ZoneDataSchema(pa.DataFrameModel):
+        """Schema definition for zone data"""
+        zone_id: Index[pa.Int64] = pa.Field(ge=0, check_name=True)
+        centroid: GeoSeries[Point] = pa.Field(nullable=True)
+        polygon: GeoSeries[Polygon] = pa.Field(nullable=True)
+    DataFrameType = DataFrame[ZoneDataSchema]
+except ImportError:
+    from geopandas import GeoSeries
+    from pandas import DataFrame, Index
+    USE_DATA_VALIDATION = False
+    DataFrameType = DataFrame
 
 class Zone():
     """Represenstation of a single traffic assignemetn zone"""
@@ -73,7 +82,7 @@ class Zone():
 class ZoneMapping:
     """Zone mapping of zone IDs and offsets"""
 
-    zone_data: DataFrame[ZoneDataSchema]
+    zone_data: DataFrameType
 
     @classmethod
     def from_gpkg(cls, filename: Path) -> ZoneMapping:
@@ -98,7 +107,7 @@ class ZoneMapping:
             .rename(columns={'geometry': 'polygon'}) \
             .set_index(POLYGON_ID_COLUMN)
         polygons.index = polygons.index.astype('int64')
-        result = DataFrame[ZoneDataSchema](polygons.join(centroids))
+        result = DataFrameType(polygons.join(centroids))
         return ZoneMapping(result)
 
     @classmethod
@@ -110,7 +119,7 @@ class ZoneMapping:
                             index=pd.Index(data=zones, 
                                            name='zone_id', 
                                            dtype='int64'))
-        result = DataFrame[ZoneDataSchema](data)
+        result = DataFrameType(data)
         return ZoneMapping(result)
 
     @classmethod
@@ -146,10 +155,10 @@ class ZoneMapping:
         extension = filename.suffix
         return loaders[extension](filename)
 
-    def __init__(self, data: DataFrame[ZoneDataSchema]):
+    def __init__(self, data: DataFrameType):
         """Initializes zone mapping from given geodataframe.
         Args:
-            data (DataFrame[ZoneDataSchema]): The dataframe must contain the following 
+            data (DataFrameType): The dataframe must contain the following 
                 index:
                     zone_id (int): Unique ID number of the zone.
                 columns:
@@ -158,7 +167,7 @@ class ZoneMapping:
         """
         selected_data = data[SELECTED_ZONE_DATA].sort_index()
        
-        self.zone_data = cast(DataFrame[ZoneDataSchema], selected_data)
+        self.zone_data = cast(DataFrameType, selected_data)
         self.zone_data.index.name = POLYGON_ID_COLUMN
 
     def has_geometry(self) -> bool:

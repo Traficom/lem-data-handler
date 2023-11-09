@@ -108,7 +108,7 @@ dependencies = [
   "numpy",
   "openmatrix",
   "pandas",
-  "pandera",
+  "pandera; python_version > '3.9'",
   "pygeos; python_version < '3.8'",
   "rtree",
   "scipy",
