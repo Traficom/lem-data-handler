@@ -104,14 +104,20 @@ classifiers = [  # Optional
 # For an analysis of this field vs pip's requirements files see:
 # https://packaging.python.org/discussions/install-requires-vs-requirements/
 dependencies = [
+  "fiona==1.8.5; python_version < '3.8'",
   "geopandas",
-  "numpy",
-  "openmatrix",
-  "pandas",
+  "numpy==1.17.0; python_version < '3.8'",
+  "numpy; python_version >= '3.8'",  
+  "openmatrix==0.3.4.1; python_version < '3.8'",
+  "openmatrix; python_version >= '3.8'",
+  "pandas==0.24.2; python_version < '3.8'",
+  "pandas; python_version >= '3.8'",
   "pandera; python_version > '3.9'",
   "pygeos; python_version < '3.8'",
+#  "pyogrio",
   "rtree",
   "scipy",
+  "shapely==1.6.4.post1; python_version < '3.8'"
 ]
 
 # List additional groups of dependencies here (e.g. development
