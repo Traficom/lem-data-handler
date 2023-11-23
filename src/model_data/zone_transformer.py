@@ -6,11 +6,17 @@ from abc import ABC, abstractmethod
 
 import geopandas as gpd
 import numpy as np
-import numpy.typing as npt
+
+try:
+    import numpy.typing as npt
+except:
+    pass
+from typing import TypeVar, cast
+
 # bsr_array not supported by older scipy.sparse (Emme)
 #from scipy.sparse import bsr_array
 from scipy.sparse import bsr_matrix
-from typing import TypeVar, cast
+
 from model_data.zone_mapping import ZoneMapping
 
 MIN_INTERSECTION_AREA = 0.00000001
@@ -30,8 +36,8 @@ class ZoneTransformer(ABC):
     """A class to handle matrix transformations between zone mappings
     """
     @abstractmethod
-    def transform_matrix(self, matrix: npt.NDArray[np.number]) \
-        -> npt.NDArray[np.floating]:
+    def transform_matrix(self, matrix: 'npt.NDArray[np.number]') \
+        -> 'npt.NDArray[np.floating]':
         """Abstract base class for matrix transformer that converts matrices
         from one zoning system to an other.
 
@@ -44,8 +50,8 @@ class ZoneTransformer(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def transform_vectors(self, vector: npt.NDArray[np.floating]) \
-        -> npt.NDArray[np.floating]:
+    def transform_vectors(self, vector: 'npt.NDArray[np.floating]') \
+        -> 'npt.NDArray[np.floating]':
         """Abstract base class for matrix transformer that converts 1D vector
         from one zoning system to an other.
 
@@ -98,12 +104,15 @@ class AreaShareTransformer(ZoneTransformer):
         print(self._multiplier)
         
     
-    def transform_matrix(self, matrix: npt.NDArray[np.number]) \
-        -> npt.NDArray[np.floating]:
+    def transform_matrix(self, matrix: 'npt.NDArray[np.number]') \
+        -> 'npt.NDArray[np.floating]':
         # [a X a] @ [a X b] -> [a X b]
         a = (matrix @ self._multiplier) 
         b = self._multiplier.transpose() @ a
         return b
+    
+    def transform_vectors(self, vector: np.ndarray) -> np.ndarray:
+        return vector @ self._multiplier
     
     def transform_vectors(self, vector: np.ndarray) -> np.ndarray:
         return vector @ self._multiplier
