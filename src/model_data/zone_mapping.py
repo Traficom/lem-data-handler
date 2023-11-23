@@ -79,10 +79,26 @@ class Zone():
         """Borders of the zone"""
         return self._mapping.zone_data.iloc[self._offset].polygon
 
+def _replace_or_rename_index(data: pd.DataFrame, index_col: str) -> pd.DataFrame:
+    """Helper function to accept dataframe index as normal columns or as the index.
+
+    Args:
+        data (pd.DataFrame): Input pandas DataFrame
+        index_col (str): Column to use as index
+
+    Returns:
+        pd.DataFrame: Input dataframe with index replaced wiht specified column if found
+    """
+    if  index_col not in data:
+        data.index.rename(index_col)
+        return data
+    return data.set_index(index_col)
+
 class ZoneMapping:
     """Zone mapping of zone IDs and offsets"""
 
     zone_data: DataFrameType
+
 
     @classmethod
     def from_gpkg(cls, filename: Path) -> ZoneMapping:
@@ -96,16 +112,16 @@ class ZoneMapping:
         """
         centroids = cast(pd.DataFrame, gpd.read_file(filename=filename,
                             layer='centroids',
-                            engine=GEO_ENGINE)[[CENTROID_ID_COLUMN, 'geometry']])\
-                .rename(columns={'geometry': 'centroid'})\
-                .set_index(CENTROID_ID_COLUMN)
+                            engine=GEO_ENGINE))
+        centroids = _replace_or_rename_index(centroids, CENTROID_ID_COLUMN)\
+                .rename(columns={'geometry': 'centroid'})[['centroid']]
         centroids.index = centroids.index.astype('int64')
         
         polygons = cast(pd.DataFrame, gpd.read_file(filename,
                             layer='centroid_polygons',
-                            engine=GEO_ENGINE)[[POLYGON_ID_COLUMN, 'geometry']])\
-            .rename(columns={'geometry': 'polygon'}) \
-            .set_index(POLYGON_ID_COLUMN)
+                            engine=GEO_ENGINE))
+        polygons = _replace_or_rename_index(polygons, POLYGON_ID_COLUMN)\
+            .rename(columns={'geometry': 'polygon'})[['polygon']]
         polygons.index = polygons.index.astype('int64')
         result = DataFrameType(polygons.join(centroids))
         return ZoneMapping(result)
@@ -148,6 +164,9 @@ class ZoneMapping:
         Returns:
             ZoneMapping: New zone mapping read from the file
         """
+        if not filename.is_file():
+            msg = f'Zonemapping file {filename} not found'
+            raise FileNotFoundError(msg)
         loaders = {
             '.gpkg': ZoneMapping.from_gpkg,
             '.omx': ZoneMapping.from_omx,
