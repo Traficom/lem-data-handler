@@ -6,6 +6,7 @@ from enum import Enum
 from functools import total_ordering
 from typing import Any, Dict, Iterable, NamedTuple, Set
 
+
 @total_ordering
 class Phase(Enum):
     GLOBAL = 0
@@ -28,8 +29,6 @@ class Module(ABC):
         
     name: str
     _provides: Set[str]
-    #_requires: Set[str]
-    #_optional: Set[str]
 
     @abstractmethod
     def process(self, **kwargs) -> Dict[str, CachedValue]:
@@ -86,13 +85,3 @@ class Module(ABC):
     
     def __str__(self) -> str:
         return self.name
-
-class TestModule(Module):
-    def __init__(self, name: str):
-        super().__init__(name, ['test_res1', 'test_res2'])
-    
-    def process(self, a: int, b: float, c: bool=False) -> Dict[str, CachedValue]:
-        return {
-            'test_res1': CachedValue(10),
-            'test_res2': CachedValue(20)
-        }

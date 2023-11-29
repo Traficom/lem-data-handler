@@ -1,7 +1,6 @@
 """Data loaders for importing data into the model zone mapping"""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, NamedTuple, Tuple, cast
 
@@ -224,8 +223,4 @@ def section_to_config(file_conf: Dict[str, Any],
                           aggregation = _get_aggregation(file_conf),
                           columns=columns)
 
-    return DataFileConfig(data_file = file_path,
-                          extra_arguments=file_conf['file']['extra'],
-                          aggregation = _get_aggregation(file_conf),
-                          columns=columns)
 
