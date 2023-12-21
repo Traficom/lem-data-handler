@@ -104,6 +104,7 @@ class DataFileConfig(NamedTuple):
     extra_arguments: Dict[str, Any]
     aggregation: Aggregation
     columns: List[ColumnConfig]
+    derived: Dict[str, str]
 
 def combine_zone_data(mapped_data: Iterable[Tuple[ZoneMappedData, 
                                                   Dict[str, CollisionHandler]]]
@@ -163,7 +164,10 @@ def load_files(configs: Iterable[DataFileConfig],
                 results[col.result] = data[col.column].astype(float)
         if results.geometry is not None and data.geometry.isnull().all():
             results.pop(results.geometry.name)
-        loaded_data.append(( file_config.aggregation(zone_mapping, results),
+        mapped_data = file_config.aggregation(zone_mapping, results)
+        for result, formula in file_config.derived.items():
+            mapped_data.data[result] = eval(formula, {}, mapped_data.data)
+        loaded_data.append(( mapped_data,
                              on_collision ))
     return combine_zone_data(loaded_data)
 
@@ -215,12 +219,12 @@ def section_to_config(file_conf: Dict[str, Any],
                             x['shares'].copy() if 'shares' in x else None,
                             _get_collision_handler(x))
                     for x in file_conf['columns']]
+    derived = file_conf.get('derived', {})
     file_path = Path(file_conf['file']['file_name'])
     if not file_path.is_absolute():
         file_path = base_dir / file_path
     return DataFileConfig(data_file = file_path,
                           extra_arguments=file_conf['file']['extra'],
                           aggregation = _get_aggregation(file_conf),
-                          columns=columns)
-
+                          columns=columns, derived=derived)
 
