@@ -104,6 +104,7 @@ classifiers = [  # Optional
 # For an analysis of this field vs pip's requirements files see:
 # https://packaging.python.org/discussions/install-requires-vs-requirements/
 dependencies = [
+  "fiona < 1.9.0; python_version < '3.8'",
   "geopandas",
   "numpy",  
   "openmatrix",
